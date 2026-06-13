@@ -2,9 +2,11 @@
 
 ## 核心判断
 
-这个项目不是“视频制作工具”，而是一个 AI-native 垂直能力服务平台。
+本项目不是传统网页工具，也不是某一个单点 AI 功能。
 
-核心思路：
+它的核心是：把高价值垂直任务包装成可被智能体、CLI、MCP、工作流平台、Web 和企业 API 调用的服务单元。
+
+核心链路：
 
 ```text
 高价值垂直任务
@@ -44,15 +46,16 @@ AI-native 产品会增加智能体渠道：
 
 > 可被智能体调用的 AI 垂直能力服务平台。
 
-第一阶段不做通用能力市场，先用一个具体场景验证平台方法。
+第一阶段不做通用能力市场，也不直接做大而全 SaaS。先选择一个具体服务单元验证平台方法。
 
-首个落地例子：
+平台要验证的是：
 
-> 小说/剧本到 AI 漫剧前期制作包。
+1. 一个垂直能力能否被标准化成服务单元。
+2. 一个服务单元能否通过多渠道稳定调用。
+3. 用户是否愿意用账号和额度消费服务结果。
+4. 调用、成本、失败、重试、交付是否能被统一管理。
 
-视频制作只是第一个验证场景，不是项目全部边界。选择它是因为这个场景有明确输入、明确产出、明确付费对象和清晰生产链路。
-
-## 服务单元
+## 服务单元规范
 
 每个能力都按“服务单元”设计。
 
@@ -65,6 +68,21 @@ AI-native 产品会增加智能体渠道：
 5. 如何验收质量。
 6. 失败如何重试。
 7. 可以通过哪些渠道调用。
+
+服务单元的标准描述：
+
+```text
+service_id:
+name:
+target_user:
+input_schema:
+output_schema:
+credit_rule:
+quality_check:
+retry_policy:
+channels:
+package_manifest:
+```
 
 第一批候选服务单元：
 
@@ -80,66 +98,7 @@ AI-native 产品会增加智能体渠道：
 | `proposal_pack` | 故事、角色图、分镜 | Markdown/PPT 提案、粗剪 Demo | 商务、IP 方 |
 | `workflow_pack` | 分镜表/资产 | ComfyUI workflow、批量 prompt、任务清单 | AI 操作员 |
 
-第一阶段只重点验证 `story_to_pack`，最多补一个轻量的 `character_to_reference_pack`。
-
-## 落地例子：story_to_pack
-
-`story_to_pack` 的目标不是直接生成发布级视频，而是把小说/剧本变成可评审、可分工、可继续生成的视频前期制作包。
-
-输入：
-
-```text
-- 小说/剧本文本
-- 画风
-- 目标镜头数
-- 输出类型
-```
-
-输出：
-
-```text
-package.zip
-├── storyboard.md
-├── characters.json
-├── scenes.json
-├── shots.csv
-├── shots.json
-├── prompts.json
-├── assets/
-│   ├── characters/
-│   ├── scenes/
-│   └── keyframes/
-├── rough-cut.mp4
-└── manifest.json
-```
-
-资源包价值：
-
-```text
-小说/剧本
--> 可评审的方向
--> 可报价的镜头清单
--> 可分工的生产任务
--> 可复用的角色/场景资产
--> 可继续图生视频的关键帧
--> 可用于提案的粗剪 Demo
-```
-
-类比软件项目：
-
-| 软件项目 | 视频前期制作包 |
-|---|---|
-| PRD | 故事分析、剧本结构、角色关系、场景设定 |
-| 架构设计 | 分集、分场、分镜结构 |
-| 技术方案 | 画风、模型选择、prompt、参考图、生成参数 |
-| UI 设计稿 | 角色基准图、场景图、镜头关键帧 |
-| 任务分解 | 每个镜头的生成任务、剪辑任务、配音任务 |
-| 原型 Demo | 粗剪视频 |
-| 工期/预算评估 | 镜头数量、生成成本、返工次数、资产复用情况 |
-
-准确卖点不是“一键生成视频”，而是：
-
-> 把小说/剧本转成可开工的视频前期制作包。
+第一个落地例子见：[story_to_pack：小说/剧本到 AI 漫剧前期制作包](examples/story-to-pack.md)。
 
 ## 渠道模型
 
@@ -206,14 +165,13 @@ flowchart TD
   API --> S3["对象存储"]
   API --> Q["任务队列"]
 
-  Q --> TEXT["文本工作流"]
-  TEXT --> LLM["LLM Provider"]
-  Q --> IMG["图片生成"]
-  Q --> RENDER["粗剪/导出"]
+  Q --> WORKER["服务单元 Worker"]
+  WORKER --> MODEL["模型 / 工作流 Provider"]
+  WORKER --> PACKAGE["资源包打包"]
 
-  IMG --> S3
-  RENDER --> S3
-  Q --> DB
+  MODEL --> S3
+  PACKAGE --> S3
+  WORKER --> DB
 ```
 
 推荐 MVP 技术栈：
@@ -224,10 +182,8 @@ CLI：Node.js / Python
 数据库：Postgres
 对象存储：MinIO，后续可换 S3/OSS
 队列：Redis + BullMQ
-文本工作流：Dify，后续可迁移 LangGraph
-文本模型：OpenAI / Qwen / DeepSeek / Hermes，通过 Provider 抽象接入
-图片生成：ComfyUI 或第三方 Image API
-视频合成：Remotion
+工作流：Dify，后续可迁移 LangGraph
+模型：OpenAI / Qwen / DeepSeek / Hermes，通过 Provider 抽象接入
 MCP：Remote MCP Server
 Web：Next.js，只做展示、注册、提交试跑和下载结果
 ```
@@ -263,7 +219,8 @@ channel_invocations
 
 ```bash
 ainong login
-ainong run story_to_pack ./story.txt --style anime --max-shots 30
+ainong services
+ainong run <service_id> <input_file> --option value
 ainong status <job_id>
 ainong export <project_id> --format zip
 ainong check <package.zip>
@@ -272,7 +229,8 @@ ainong check <package.zip>
 CLI 负责：
 
 - 登录和保存用户级 token。
-- 上传文本。
+- 查看可用服务单元。
+- 上传输入文件。
 - 创建服务单元任务。
 - 查询状态。
 - 下载资源包。
@@ -305,20 +263,14 @@ export_package
 check_package
 ```
 
-第一阶段可以把 `story_to_pack` 暴露成：
+## 30 天平台验证计划
 
-```text
-create_story_pack
-```
+### 第 1 周：定义服务单元协议
 
-## 30 天计划
-
-### 第 1 周：样板资源包
-
-- 做 2-3 个 `story_to_pack` 样板。
-- 明确 `package.zip` 目录结构。
-- 明确 `manifest.json`。
-- 明确资源包验收清单。
+- 定义 `service_units` 表。
+- 定义 `manifest.json`。
+- 定义资源包目录规范。
+- 定义质量验收清单。
 
 ### 第 2 周：后端 API + CLI
 
@@ -328,15 +280,14 @@ create_story_pack
 - 创建任务。
 - 查询状态。
 - 下载资源包。
-- CLI 跑通 `story_to_pack`。
+- CLI 跑通一个服务单元。
 
-### 第 3 周：服务生产链路
+### 第 3 周：首个服务单元
 
-- 文本拆解。
-- 角色/场景/分镜生成。
-- 图片生成。
-- 粗剪导出。
-- 资源包打包。
+- 选择一个服务单元做完整样板。
+- 跑通生产 Worker。
+- 跑通资源包打包。
+- 记录成本、失败率和重试。
 
 ### 第 4 周：发布渠道验证
 
@@ -345,12 +296,12 @@ create_story_pack
 - Dify Tool。
 - FastGPT OpenAPI/MCP。
 - 极简 Web。
-- 找 5 个真实文本试跑。
+- 找 5 个真实输入试跑。
 
 30 天验证标准：
 
 ```text
-5 个真实文本
+5 个真实输入
 2 个愿意付费或继续合作的客户
 1 个能被 CLI/Skill/MCP 稳定调用的服务单元
 1 套可复用的资源包协议
@@ -358,10 +309,10 @@ create_story_pack
 
 ## 待验证问题
 
-1. 第一阶段是否只验证 `story_to_pack`，还是同步做轻量 `character_to_reference_pack`？
-2. 免费额度按字数、镜头数、图片数还是资源包次数限制？
+1. 第一阶段只验证一个服务单元，还是同步做一个轻量服务单元？
+2. 免费额度按调用次数、输入规模、产出规模还是资源包次数限制？
 3. 第一批发布渠道优先选 Codex Skill、Dify、FastGPT 还是扣子？
-4. 用户最愿意为分镜表、图片素材包、粗剪视频还是提案包付费？
+4. 用户最愿意为哪类标准资源包付费？
 5. 是否已有账号、额度、项目和资产系统可复用？
 6. 哪个服务单元能最快产生付费验证？
 
@@ -372,5 +323,4 @@ create_story_pack
 - Dify：`https://github.com/langgenius/dify`
 - FastGPT：`https://github.com/labring/FastGPT`
 - Coze：`https://www.coze.com`
-- ComfyUI：`https://github.com/comfy-org/comfyui`
-- Remotion：`https://github.com/remotion-dev/remotion`
+
