@@ -88,6 +88,7 @@ package_manifest:
 
 | 服务单元 | 输入 | 输出 | 目标用户 |
 |---|---|---|---|
+| `dreamina_cli_pool` | 官方 Dreamina CLI 命令 | 多账号调度、任务绑定、结果包 | AI 创作者、内部交付团队 |
 | `story_to_pack` | 小说/剧本文本 | 分镜表、角色卡、场景卡、关键帧、粗剪、资源包 | 漫剧/短剧团队 |
 | `script_to_storyboard` | 剧本/文本片段 | 分镜表、镜头任务、prompt | 编剧、AI 操作员 |
 | `character_to_reference_pack` | 角色描述/参考图 | 角色卡、多角度图、参考图、prompt | AI 绘图师、制作团队 |
@@ -98,7 +99,9 @@ package_manifest:
 | `proposal_pack` | 故事、角色图、分镜 | Markdown/PPT 提案、粗剪 Demo | 商务、IP 方 |
 | `workflow_pack` | 分镜表/资产 | ComfyUI workflow、批量 prompt、任务清单 | AI 操作员 |
 
-第一个落地例子见：[story_to_pack：小说/剧本到 AI 漫剧前期制作包](examples/story-to-pack.md)。
+第一个技术闭环见：[dreamina_cli_pool：Dreamina CLI 多账号池封装](examples/dreamina-cli-pool.md)。
+
+第一个业务闭环见：[story_to_pack：小说/剧本到 AI 漫剧前期制作包](examples/story-to-pack.md)。
 
 ## 渠道模型
 
@@ -177,15 +180,15 @@ flowchart TD
 推荐 MVP 技术栈：
 
 ```text
-CLI：Node.js / Python
-后端：NestJS / Fastify / Next.js API
-数据库：Postgres
-对象存储：MinIO，后续可换 S3/OSS
-队列：Redis + BullMQ
-工作流：Dify，后续可迁移 LangGraph
-模型：OpenAI / Qwen / DeepSeek / Hermes，通过 Provider 抽象接入
-MCP：Remote MCP Server
-Web：Next.js，只做展示、注册、提交试跑和下载结果
+CLI：Node.js + TypeScript，全局 npm 安装
+后端：Python + FastAPI
+本地存储：SQLite 起步，后续迁移 Postgres
+任务执行：asyncio subprocess
+账号池：每个 Dreamina 账号独立 HOME
+锁：账号目录文件锁
+被封装工具：官方 dreamina CLI
+MCP：后续暴露 Remote MCP Server
+Web：后续只做展示、注册、提交试跑和下载结果
 ```
 
 ## 核心对象
@@ -211,36 +214,52 @@ channel_invocations
 4. `generation_tasks` 统一管理排队、执行、失败、重试和扣费。
 5. `api_tokens` 只保存用户级 token，不保存供应商模型密钥。
 
-## CLI 协议
+## Dreamina 增强封装协议
 
-第一阶段 CLI 是最稳定的执行入口。
+第一阶段 `ainong` 不是另起一套创作命令，而是对官方 `dreamina` CLI 做增强封装。
+
+官方 `dreamina` 的安装方式：
+
+```bash
+curl -fsSL https://jimeng.jianying.com/cli | bash
+```
+
+`ainong` 的安装方式：
+
+```bash
+npm install -g ainong
+```
+
+`ainong` 应尽量兼容原 `dreamina` 的使用心智。用户不需要理解 `ainong dreamina ...` 这种二级命令；`ainong` 就是带账号池能力的 Dreamina 增强入口。
 
 建议命令：
 
 ```bash
 ainong login
-ainong services
-ainong run <service_id> <input_file> --option value
-ainong status <job_id>
-ainong export <project_id> --format zip
+ainong accounts
+ainong text2video --prompt "古风少女，月下庭院"
+ainong image2video --image ./input.png --prompt "镜头缓慢推进"
+ainong frames2video --first ./first.png --last ./last.png --prompt "角色转身"
+ainong status <task_id>
+ainong export <task_id> --format zip
 ainong check <package.zip>
 ```
 
-CLI 负责：
+`ainong` 增加的能力：
 
-- 登录和保存用户级 token。
-- 查看可用服务单元。
-- 上传输入文件。
-- 创建服务单元任务。
-- 查询状态。
-- 下载资源包。
-- 本地检查资源包完整性。
+- 多账号登录。
+- 使用 Dreamina 登录后的用户唯一标识作为账号 ID。
+- 每个账号独立 `HOME`。
+- 自动选择可用账号。
+- 单账号文件锁，避免同一登录态并发冲突。
+- 任务和账号绑定，查询结果时回到原账号。
+- 结果打包为标准 `package.zip`。
 
 CLI 不负责：
 
 - 内置供应商模型 token。
-- 直接调用模型供应商。
-- 保存服务端业务事实。
+- 绕过官方 `dreamina` 登录态。
+- 伪造或共享用户登录凭据。
 
 ## Skill / MCP 协议
 
@@ -265,56 +284,57 @@ check_package
 
 ## 30 天平台验证计划
 
-### 第 1 周：定义服务单元协议
+### 第 1 周：Dreamina CLI 账号池
 
-- 定义 `service_units` 表。
+- 确认官方 `dreamina` 安装流程。
+- 定义 `accounts`、`tasks`、`login_sessions`。
+- 实现 provider user id 作为账号 ID。
+- 实现独立 HOME。
+- 实现账号文件锁。
 - 定义 `manifest.json`。
-- 定义资源包目录规范。
-- 定义质量验收清单。
 
-### 第 2 周：后端 API + CLI
+### 第 2 周：Node CLI + Python 后端
 
-- 账号。
-- 用户级 token。
-- 免费额度。
-- 创建任务。
-- 查询状态。
-- 下载资源包。
-- CLI 跑通一个服务单元。
+- `npm install -g ainong`。
+- `ainong login`。
+- `ainong accounts`。
+- `ainong text2video`。
+- `ainong status`。
+- `ainong export`。
 
-### 第 3 周：首个服务单元
+### 第 3 周：真实生成与打包
 
-- 选择一个服务单元做完整样板。
-- 跑通生产 Worker。
-- 跑通资源包打包。
+- 调官方 `dreamina` CLI。
+- 自动选择账号。
+- 任务绑定账号。
+- 查询结果使用原账号。
+- 打包 `package.zip`。
 - 记录成本、失败率和重试。
 
-### 第 4 周：发布渠道验证
+### 第 4 周：Agent 渠道验证
 
 - Codex Skill。
 - MCP Server。
-- Dify Tool。
-- FastGPT OpenAPI/MCP。
-- 极简 Web。
-- 找 5 个真实输入试跑。
+- 让 Agent 调 `ainong` 完成登录、生成、查询、导出。
+- 找 5 个真实生成任务试跑。
 
 30 天验证标准：
 
 ```text
-5 个真实输入
+5 个真实生成任务
 2 个愿意付费或继续合作的客户
-1 个能被 CLI/Skill/MCP 稳定调用的服务单元
+1 个能被 CLI/Skill/MCP 稳定调用的 Dreamina 账号池封装
 1 套可复用的资源包协议
 ```
 
 ## 待验证问题
 
-1. 第一阶段只验证一个服务单元，还是同步做一个轻量服务单元？
-2. 免费额度按调用次数、输入规模、产出规模还是资源包次数限制？
-3. 第一批发布渠道优先选 Codex Skill、Dify、FastGPT 还是扣子？
-4. 用户最愿意为哪类标准资源包付费？
-5. 是否已有账号、额度、项目和资产系统可复用？
-6. 哪个服务单元能最快产生付费验证？
+1. `ainong` 是否完全兼容原 `dreamina` 参数，还是只封装高频命令？
+2. 登录后可稳定获取的 Dreamina 用户唯一标识字段是什么？
+3. 账号池并发策略是单账号严格串行，还是允许按命令类型放宽？
+4. 免费额度按生成次数、账号数、任务时长还是资源包次数限制？
+5. 第一批发布渠道优先做 Codex Skill 还是 MCP？
+6. `dreamina_cli_pool` 跑通后，第二个业务服务单元是否做 `story_to_pack`？
 
 ## 参考
 
@@ -323,4 +343,4 @@ check_package
 - Dify：`https://github.com/langgenius/dify`
 - FastGPT：`https://github.com/labring/FastGPT`
 - Coze：`https://www.coze.com`
-
+- Dreamina CLI install：`https://jimeng.jianying.com/ai-tool/install`
