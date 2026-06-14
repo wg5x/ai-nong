@@ -1,0 +1,12 @@
+{
+  "name": "ai-nong",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-native service platform prototypes.",
+  "scripts": {
+    "build": "pnpm --filter ainong build",
+    "check": "pnpm --filter ainong check",
+    "cli": "pnpm --filter ainong dev"
+  },
+  "packageManager": "pnpm@10.17.1"
+}

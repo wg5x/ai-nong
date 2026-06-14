@@ -1,0 +1,29 @@
+{
+  "name": "ainong",
+  "version": "0.1.0",
+  "description": "Ainong CLI: Dreamina-compatible account-pool wrapper.",
+  "type": "module",
+  "bin": {
+    "ainong": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "commander": "^14.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist"
+  ]
+}
+

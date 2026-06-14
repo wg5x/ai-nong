@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+dist/
+.turbo/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ainong/
+*.db
+*.sqlite
+*.log
+

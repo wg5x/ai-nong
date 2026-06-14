@@ -75,14 +75,22 @@ ainong --help
 ainong login
 ```
 
+`ainong login` 会返回官方 OAuth Device Flow 的授权地址、用户码和本地登录会话 ID。用户在浏览器完成授权后，再执行：
+
+```bash
+ainong login check <session_id>
+```
+
 内部流程：
 
 ```text
 创建 login session
 -> 创建临时 HOME
--> HOME=<temp_home> dreamina login
--> 用户扫码或授权
--> 读取 provider_user_id
+-> HOME=<temp_home> dreamina login --headless
+-> 用户打开 verification_uri 并输入 user_code
+-> HOME=<temp_home> dreamina login checklogin --device_code=...
+-> HOME=<temp_home> dreamina user_credit
+-> 读取真实 provider_user_id
 -> 移动 HOME 到 accounts/{provider_user_id}
 -> 写入 accounts 表
 ```
@@ -133,7 +141,7 @@ ainong status <task_id>
 
 ```text
 根据 task_id 找 provider_user_id
--> HOME=accounts/{provider_user_id} dreamina 查询任务
+-> HOME=accounts/{provider_user_id} dreamina query_result --submit_id=...
 -> 更新任务状态
 ```
 
@@ -245,6 +253,7 @@ tasks (
 
 login_sessions (
   id TEXT PRIMARY KEY,
+  account_id TEXT,
   temp_home_dir TEXT NOT NULL,
   provider_user_id TEXT,
   status TEXT NOT NULL,
@@ -252,6 +261,9 @@ login_sessions (
   user_code TEXT,
   device_code TEXT,
   expires_at TEXT,
+  stdout TEXT,
+  stderr TEXT,
+  last_error TEXT,
   created_at TEXT,
   updated_at TEXT
 );
@@ -319,6 +331,33 @@ package.zip
 不做支付
 不做多机器调度
 不内置 Dreamina 登录凭据
+```
+
+## 当前实现状态
+
+已实现：
+
+```text
+Node.js + TypeScript CLI
+Python FastAPI 本地服务
+SQLite 账号池
+Dreamina 登录会话
+provider_user_id 入池
+账号 HOME 隔离
+单账号文件锁
+text2video / image2video / frames2video 透传
+status 回原账号查询
+```
+
+暂未实现：
+
+```text
+npm 全局发布
+package.zip 打包
+资源包 check
+Web
+MCP
+多机器调度
 ```
 
 ## 验收标准
