@@ -4,9 +4,6 @@
 
 ```bash
 pnpm install
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -r apps/api/requirements.txt
 ```
 
 ## 检查 Dreamina
@@ -16,13 +13,6 @@ pip install -r apps/api/requirements.txt
 ```bash
 curl -fsSL https://jimeng.jianying.com/cli | bash
 dreamina --help
-```
-
-## 启动本地 API
-
-```bash
-. .venv/bin/activate
-uvicorn ainong_api.main:app --app-dir apps/api --reload --port 8765
 ```
 
 ## 运行 CLI
@@ -46,7 +36,7 @@ pnpm cli -- login
 pnpm cli -- login check <session_id>
 ```
 
-检查成功后，后端会调用 `dreamina user_credit` 读取真实 `provider_user_id`，并把临时账号目录晋升到：
+检查成功后，CLI 会调用 `dreamina user_credit` 读取真实 `provider_user_id`，并把临时账号目录晋升到：
 
 ```text
 ~/.ainong/dreamina/accounts/{provider_user_id}/
@@ -76,7 +66,6 @@ pnpm cli -- status <task_id>
 
 ```text
 Node.js + TypeScript CLI
-Python FastAPI 本地服务
 SQLite 账号池
 Dreamina 登录会话
 provider_user_id 入池
@@ -109,11 +98,4 @@ pnpm pack:cli
 pnpm publish:cli
 ```
 
-注意：当前 npm 包只包含 Node.js CLI。账号池 API 仍需要本地启动：
-
-```bash
-. .venv/bin/activate
-uvicorn ainong_api.main:app --app-dir apps/api --port 8765
-```
-
-要让外部用户做到真正的一条命令可用，下一步需要补 `ainong serve`，由 CLI 自动启动或安装本地 Python API。
+当前 npm 包就是完整本地 CLI，不需要额外启动本地服务。

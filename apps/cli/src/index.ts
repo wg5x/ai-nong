@@ -2,18 +2,11 @@
 import { Command } from "commander";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { ainongHome, dreaminaBaseDir } from "./settings.js";
+import { DreaminaService } from "./dreamina.js";
 
 const VERSION = "0.1.0";
-
-function ainongHome(): string {
-  return process.env.AINONG_HOME || join(homedir(), ".ainong");
-}
-
-function apiBaseUrl(): string {
-  return process.env.AINONG_API_URL || "http://127.0.0.1:8765";
-}
+const dreamina = new DreaminaService();
 
 function ensureHome(): void {
   mkdirSync(ainongHome(), { recursive: true });
@@ -34,27 +27,6 @@ function runPassthrough(command: string, args: string[], env?: NodeJS.ProcessEnv
   return result.status ?? 1;
 }
 
-async function requestJson(path: string, init?: RequestInit): Promise<unknown> {
-  const url = `${apiBaseUrl()}${path}`;
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers || {}),
-    },
-  });
-  const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    const detail =
-      body && typeof body === "object" && "detail" in body
-        ? String((body as { detail: unknown }).detail)
-        : response.statusText;
-    throw new Error(`${response.status} ${detail}`);
-  }
-  return body;
-}
-
 function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
@@ -73,7 +45,7 @@ program
     ensureHome();
     const checks = {
       ainongHome: ainongHome(),
-      apiBaseUrl: apiBaseUrl(),
+      dreaminaBaseDir: dreaminaBaseDir(),
       dreaminaFound: commandExists("dreamina"),
       node: process.version,
     };
@@ -87,9 +59,8 @@ program
 const accountsCommand = program
   .command("accounts")
   .description("List Dreamina accounts known by the local account pool.")
-  .action(async () => {
-    const result = await requestJson("/v1/dreamina/accounts");
-    printJson(result);
+  .action(() => {
+    printJson({ accounts: dreamina.pool.listAccounts() });
   });
 
 accountsCommand
@@ -97,11 +68,11 @@ accountsCommand
   .description("Refresh one Dreamina account credit snapshot.")
   .argument("<account_id>")
   .action(async (accountId: string) => {
-    const result = await requestJson(`/v1/dreamina/accounts/${encodeURIComponent(accountId)}/refresh`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    printJson(result);
+    const credit = await dreamina.refreshCredit(accountId);
+    if (!credit) {
+      throw new Error("账号不存在或额度读取失败");
+    }
+    printJson({ success: true, credit });
   });
 
 accountsCommand
@@ -109,12 +80,12 @@ accountsCommand
   .description("Enable or disable one Dreamina account.")
   .argument("<account_id>")
   .argument("<status>", "active or disabled")
-  .action(async (accountId: string, status: string) => {
-    const result = await requestJson(`/v1/dreamina/accounts/${encodeURIComponent(accountId)}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
-    });
-    printJson(result);
+  .action((accountId: string, status: string) => {
+    const account = dreamina.updateAccountStatus(accountId, status);
+    if (!account) {
+      throw new Error("账号不存在");
+    }
+    printJson({ account });
   });
 
 const loginCommand = program
@@ -128,11 +99,7 @@ const loginCommand = program
       process.exitCode = runPassthrough("dreamina", ["login", ...command.args]);
       return;
     }
-    const result = await requestJson("/v1/dreamina/login", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    printJson(result);
+    printJson(await dreamina.startLogin());
   });
 
 loginCommand
@@ -140,11 +107,7 @@ loginCommand
   .description("Check a Dreamina login session and register it into the account pool when authorized.")
   .argument("<session_id>")
   .action(async (sessionId: string) => {
-    const result = await requestJson(`/v1/dreamina/login/${encodeURIComponent(sessionId)}/check`, {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
-    printJson(result);
+    printJson(await dreamina.checkLogin(sessionId));
   });
 
 program
@@ -152,8 +115,7 @@ program
   .description("Query a Dreamina task status through the account pool.")
   .argument("<task_id>")
   .action(async (taskId: string) => {
-    const result = await requestJson(`/v1/dreamina/tasks/${encodeURIComponent(taskId)}`);
-    printJson(result);
+    printJson(await dreamina.getTask(taskId));
   });
 
 function addDreaminaPassthrough(name: string, dreaminaCommand: string): void {
@@ -163,14 +125,7 @@ function addDreaminaPassthrough(name: string, dreaminaCommand: string): void {
     .allowUnknownOption(true)
     .allowExcessArguments(true)
     .action(async (_options: unknown, command: Command) => {
-      const result = await requestJson("/v1/dreamina/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          command: dreaminaCommand,
-          args: command.args,
-        }),
-      });
-      printJson(result);
+      printJson(await dreamina.submitTask(dreaminaCommand, command.args));
     });
 }
 

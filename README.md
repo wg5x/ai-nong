@@ -9,7 +9,7 @@
 - [AI-native 垂直能力服务平台](docs/ai-native-service-platform.md)：只讲平台方法、服务单元、渠道和架构。
 - [dreamina_cli_pool 技术闭环](docs/examples/dreamina-cli-pool.md)：封装官方 `dreamina` CLI，在原能力上增加多账号池。
 - [story_to_pack 业务闭环](docs/examples/story-to-pack.md)：用“小说/剧本到 AI 漫剧前期制作包”说明后续业务服务单元。
-- [开发说明](docs/development.md)：本地 API 和 CLI 的启动方式。
+- [开发说明](docs/development.md)：本地 CLI 的启动方式。
 
 第一阶段先用 `dreamina_cli_pool` 验证真实 CLI 封装、账号池和智能体渠道。`story_to_pack` 是后续业务落地例子。
 
@@ -17,7 +17,6 @@
 
 ```text
 Node.js + TypeScript CLI: apps/cli
-Python FastAPI 本地服务: apps/api
 SQLite 账号池: ~/.ainong/dreamina/pool.db
 官方 Dreamina CLI: 通过独立 HOME 调用
 ```
@@ -31,4 +30,4 @@ npm install -g ainong
 ainong doctor
 ```
 
-当前 npm 包只负责安装 `ainong` 命令；账号池 API 仍需按开发说明启动本地 Python 服务。后续需要补 `ainong serve`，让外部用户安装后可直接启动本地服务。
+当前 npm 包就是完整本地 CLI，不需要额外启动本地服务。

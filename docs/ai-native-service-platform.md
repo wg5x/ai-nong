@@ -181,12 +181,12 @@ flowchart TD
 
 ```text
 CLI：Node.js + TypeScript，全局 npm 安装
-后端：Python + FastAPI
 本地存储：SQLite 起步，后续迁移 Postgres
-任务执行：asyncio subprocess
+任务执行：Node child_process
 账号池：每个 Dreamina 账号独立 HOME
 锁：账号目录文件锁
 被封装工具：官方 dreamina CLI
+后端 API：有多人/客户服务需求后再拆 Node.js + TypeScript 服务
 MCP：后续暴露 Remote MCP Server
 Web：后续只做展示、注册、提交试跑和下载结果
 ```
@@ -293,7 +293,7 @@ check_package
 - 实现账号文件锁。
 - 定义 `manifest.json`。
 
-### 第 2 周：Node CLI + Python 后端
+### 第 2 周：Node CLI 本地号池
 
 - `npm install -g ainong`。
 - `ainong login`。

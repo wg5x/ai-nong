@@ -200,11 +200,9 @@ provider_user_id
 flowchart TD
   USER["用户 / Agent"] --> CLI["Node CLI: ainong"]
   SKILL["Skill / MCP"] --> CLI
-  CLI --> API["Python FastAPI 本地服务"]
-
-  API --> DB["SQLite v0 / Postgres v1"]
-  API --> POOL["Dreamina Account Pool"]
-  API --> PACK["Package Builder"]
+  CLI --> DB["SQLite 本地账号池"]
+  CLI --> POOL["Dreamina Account Pool"]
+  CLI --> PACK["Package Builder"]
 
   POOL --> H1["accounts/{provider_user_id}"]
   POOL --> H2["accounts/{provider_user_id}"]
@@ -339,7 +337,6 @@ package.zip
 
 ```text
 Node.js + TypeScript CLI
-Python FastAPI 本地服务
 SQLite 账号池
 Dreamina 登录会话
 provider_user_id 入池

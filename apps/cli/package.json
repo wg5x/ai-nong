@@ -24,9 +24,11 @@
     "ainong": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "build": "pnpm run clean && tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx src/index.ts",
+    "test": "vitest run src/dreamina.test.ts",
     "prepublishOnly": "pnpm run check && pnpm run build"
   },
   "dependencies": {
@@ -35,10 +37,11 @@
   "devDependencies": {
     "@types/node": "^24.10.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "publishConfig": {
     "access": "public"

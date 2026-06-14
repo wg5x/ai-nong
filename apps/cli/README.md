@@ -28,18 +28,12 @@ ainong frames2video --first ./first.png --last ./last.png --prompt "角色转身
 ainong status <task_id>
 ```
 
-## Current Runtime
+## Runtime
 
-This package provides the Node.js CLI. Commands that manage accounts or tasks call the local Ainong API at:
+This package is a local Node.js CLI. It manages the Dreamina account pool directly with local SQLite state:
 
 ```text
-http://127.0.0.1:8765
+~/.ainong/dreamina/pool.db
 ```
 
-Set a different API endpoint with:
-
-```bash
-AINONG_API_URL=http://127.0.0.1:8765 ainong accounts
-```
-
-The local Python API is currently developed in the main repository. A future release should add `ainong serve` or a packaged daemon so `npm install -g ainong` becomes a complete one-command install.
+No local API server is required.
