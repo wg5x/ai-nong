@@ -34,7 +34,7 @@ pnpm cli -- accounts
 
 ## 登录流程
 
-`ainong login` 会通过独立临时 `HOME` 调用官方 `dreamina login --headless`，返回 `verification_uri`、`user_code` 和 `session_id`。
+`ainong login` 会分配一个临时账号目录，例如 `accounts/account-001`，并用该独立 `HOME` 调用官方 `dreamina login --headless`，返回 `verification_uri`、`user_code` 和 `session_id`。
 
 ```bash
 pnpm cli -- login
@@ -46,7 +46,7 @@ pnpm cli -- login
 pnpm cli -- login check <session_id>
 ```
 
-检查成功后，后端会调用 `dreamina user_credit` 读取真实 `provider_user_id`，并把临时 `HOME` 移动到：
+检查成功后，后端会调用 `dreamina user_credit` 读取真实 `provider_user_id`，并把临时账号目录晋升到：
 
 ```text
 ~/.ainong/dreamina/accounts/{provider_user_id}/
@@ -84,6 +84,8 @@ provider_user_id 入池
 单账号文件锁
 text2video / image2video / frames2video 透传
 status 回原账号查询
+账号 refresh / active / disabled 管理
+fake Dreamina 行为测试
 ```
 
 暂未实现：

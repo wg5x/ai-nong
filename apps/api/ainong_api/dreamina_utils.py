@@ -52,6 +52,12 @@ def provider_user_id_from_credit(credit: dict[str, Any] | None) -> str:
     return ""
 
 
+def account_id_from_provider_user_id(provider_user_id: str, fallback: str) -> str:
+    if re.fullmatch(r"[A-Za-z0-9_-]{3,64}", provider_user_id):
+        return provider_user_id
+    return fallback
+
+
 def extract_submit_id(stdout: str) -> str | None:
     parsed = parse_json_payload(stdout)
     found = _find_submit_id(parsed)

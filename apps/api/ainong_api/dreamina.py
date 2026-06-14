@@ -12,6 +12,7 @@ from typing import Any
 from .pool import DreaminaPool
 from .settings import download_dir, dreamina_command
 from .dreamina_utils import (
+    account_id_from_provider_user_id,
     extract_submit_id,
     find_video_url,
     normalize_dreamina_status,
@@ -46,19 +47,32 @@ class DreaminaService:
     def __init__(self, pool: DreaminaPool | None = None):
         self.pool = pool or DreaminaPool()
 
+    def next_account_id(self) -> str:
+        used = self.pool.used_login_account_ids()
+        index = 1
+        while True:
+            account_id = f"account-{index:03d}"
+            if account_id not in used:
+                return account_id
+            index += 1
+
     async def start_login(self) -> dict[str, Any]:
         self.pool.ensure()
+        account_id = self.next_account_id()
         session_id = uuid.uuid4().hex
-        temp_home = self.pool.login_sessions_dir / session_id
-        temp_home.mkdir(parents=True, exist_ok=True)
-        result = await run_dreamina(["login", "--headless"], temp_home)
+        home_dir = self.pool.accounts_dir / account_id
+        if home_dir.exists():
+            shutil.rmtree(home_dir)
+        home_dir.mkdir(parents=True, exist_ok=True)
+        result = await run_dreamina(["login", "--headless"], home_dir)
         if result["code"] != 0:
             detail = result["stderr"].strip() or result["stdout"].strip() or "dreamina login failed"
             raise RuntimeError(detail)
         parsed = parse_login_output(result["stdout"])
         session = self.pool.create_login_session(
             session_id=session_id,
-            temp_home_dir=temp_home,
+            account_id=account_id,
+            home_dir=home_dir,
             verification_uri=parsed["verification_uri"],
             user_code=parsed.get("user_code", ""),
             device_code=parsed["device_code"],
@@ -81,10 +95,10 @@ class DreaminaService:
             self.pool.mark_login_session(session_id, "expired", error="登录授权已过期")
             return self.pool.login_session(session_id) or {}
 
-        temp_home = Path(str(row["temp_home_dir"]))
+        home_dir = Path(str(row["home_dir"]))
         result = await run_dreamina(
             ["login", "checklogin", f"--device_code={row['device_code']}", "--poll=1"],
-            temp_home,
+            home_dir,
         )
         output = f"{result['stdout']}\n{result['stderr']}".strip()
         if result["code"] != 0:
@@ -105,20 +119,24 @@ class DreaminaService:
             )
             return self.pool.login_session(session_id) or {}
 
-        credit = await self._read_credit(temp_home)
+        credit = await self._read_credit(home_dir)
         provider_user_id = provider_user_id_from_credit(credit)
-        if not provider_user_id:
+        final_account_id = account_id_from_provider_user_id(provider_user_id, str(row["account_id"]))
+        existing_final_account = self.pool.account_row(final_account_id)
+        if existing_final_account and final_account_id != row["account_id"]:
             self.pool.mark_login_session(
                 session_id,
                 "failed",
-                error="登录成功，但未能从 dreamina user_credit 读取 provider_user_id",
+                provider_user_id=provider_user_id,
+                account_id=str(existing_final_account["id"]),
+                error=f"该 Dreamina 用户已在账号池中：{existing_final_account['id']}",
                 stdout=result["stdout"],
                 stderr=result["stderr"],
             )
             return self.pool.login_session(session_id) or {}
 
-        duplicate = self.pool.account_by_provider_user_id(provider_user_id)
-        if duplicate:
+        duplicate = await self._find_duplicate_provider_user(provider_user_id, final_account_id)
+        if duplicate and duplicate["id"] != final_account_id:
             self.pool.mark_login_session(
                 session_id,
                 "failed",
@@ -130,23 +148,11 @@ class DreaminaService:
             )
             return self.pool.login_session(session_id) or {}
 
-        account_home = self.pool.accounts_dir / provider_user_id
-        if account_home.exists():
-            self.pool.mark_login_session(
-                session_id,
-                "failed",
-                provider_user_id=provider_user_id,
-                error=f"账号目录已存在但未注册：{account_home}",
-                stdout=result["stdout"],
-                stderr=result["stderr"],
-            )
-            return self.pool.login_session(session_id) or {}
-
-        account_home.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(temp_home), str(account_home))
+        account_home = self._promote_login_home(home_dir, str(row["account_id"]), final_account_id)
         account = self.pool.register_account(
-            provider_user_id,
+            final_account_id,
             account_home,
+            provider_user_id=provider_user_id or None,
             credit_snapshot=credit,
         )
         self.pool.mark_login_session(
@@ -158,6 +164,33 @@ class DreaminaService:
             stderr=result["stderr"],
         )
         return self.pool.login_session(session_id) or {}
+
+    async def refresh_credit(self, account_id: str) -> dict[str, Any] | None:
+        account = self.pool.account_row(account_id)
+        if not account:
+            return None
+        credit = await self._read_credit(Path(str(account["home_dir"])))
+        provider_user_id = provider_user_id_from_credit(credit)
+        duplicate = await self._find_duplicate_provider_user(provider_user_id, account_id)
+        last_error = None
+        provider_user_id_to_store = provider_user_id or None
+        if duplicate and duplicate["id"] != account_id:
+            last_error = f"该 Dreamina 用户已在账号池中：{duplicate['id']}"
+            credit = None
+            provider_user_id_to_store = None
+        self.pool.update_account_credit(
+            account_id,
+            provider_user_id=provider_user_id_to_store,
+            credit_snapshot=credit,
+            last_error=last_error,
+            disable=bool(last_error),
+        )
+        return credit
+
+    def update_account_status(self, account_id: str, status: str) -> dict[str, Any] | None:
+        if status not in {"active", "disabled"}:
+            raise ValueError("status must be active or disabled")
+        return self.pool.update_account_status(account_id, status)
 
     async def submit_task(self, command: str, args: list[str]) -> dict[str, Any]:
         if command not in GENERATION_COMMANDS:
@@ -249,6 +282,68 @@ class DreaminaService:
     async def _read_credit(self, home_dir: Path) -> dict[str, Any] | None:
         result = await run_dreamina(["user_credit"], home_dir)
         return parse_json_payload(result["stdout"]) if result["code"] == 0 else None
+
+    def _promote_login_home(self, home_dir: Path, account_id: str, final_account_id: str) -> Path:
+        if final_account_id == account_id:
+            return home_dir
+        final_home_dir = self.pool.accounts_dir / final_account_id
+        if final_home_dir.exists():
+            return final_home_dir
+        final_home_dir.parent.mkdir(parents=True, exist_ok=True)
+        if home_dir.exists():
+            shutil.move(str(home_dir), str(final_home_dir))
+        else:
+            final_home_dir.mkdir(parents=True, exist_ok=True)
+        return final_home_dir
+
+    async def _find_duplicate_provider_user(
+        self,
+        provider_user_id: str,
+        current_account_id: str,
+    ) -> dict[str, object] | None:
+        duplicate = self.pool.account_by_provider_user_id(provider_user_id)
+        if duplicate and duplicate["id"] != current_account_id:
+            return duplicate
+        if not provider_user_id:
+            return None
+        can_store_matching_unmarked_account = duplicate is None
+
+        for account in self.pool.accounts_without_provider_user_id():
+            if account["id"] == current_account_id:
+                continue
+            credit = await self._read_credit(Path(str(account["home_dir"])))
+            discovered_provider_user_id = provider_user_id_from_credit(credit)
+            if not discovered_provider_user_id:
+                continue
+            if discovered_provider_user_id == provider_user_id:
+                if duplicate and duplicate["id"] == current_account_id:
+                    self.pool.update_account_credit(
+                        str(account["id"]),
+                        provider_user_id=None,
+                        credit_snapshot=None,
+                        last_error=f"该 Dreamina 用户已在账号池中：{current_account_id}",
+                        disable=True,
+                    )
+                    continue
+                if can_store_matching_unmarked_account:
+                    self.pool.update_account_credit(
+                        str(account["id"]),
+                        provider_user_id=discovered_provider_user_id,
+                        credit_snapshot=credit,
+                        last_error=None,
+                    )
+                    return self.pool.account_row(str(account["id"]))
+                return account
+            discovered_duplicate = self.pool.account_by_provider_user_id(discovered_provider_user_id)
+            if discovered_duplicate and discovered_duplicate["id"] != account["id"]:
+                continue
+            self.pool.update_account_credit(
+                str(account["id"]),
+                provider_user_id=discovered_provider_user_id,
+                credit_snapshot=credit,
+                last_error=None,
+            )
+        return None
 
     def _is_expired(self, expires_at: object) -> bool:
         if not expires_at:

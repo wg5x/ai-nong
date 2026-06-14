@@ -85,7 +85,7 @@ ainong login check <session_id>
 
 ```text
 创建 login session
--> 创建临时 HOME
+-> 创建临时账号 HOME：accounts/account-001
 -> HOME=<temp_home> dreamina login --headless
 -> 用户打开 verification_uri 并输入 user_code
 -> HOME=<temp_home> dreamina login checklogin --device_code=...
@@ -179,10 +179,10 @@ provider_user_id
 ~/.ainong/dreamina/accounts/{provider_user_id}/
 ```
 
-如果登录前还不知道 `provider_user_id`，可以先使用临时目录：
+如果登录前还不知道 `provider_user_id`，可以先使用临时账号目录：
 
 ```text
-~/.ainong/dreamina/login_sessions/{session_id}/
+~/.ainong/dreamina/accounts/account-001/
 ```
 
 登录成功后：
@@ -253,8 +253,8 @@ tasks (
 
 login_sessions (
   id TEXT PRIMARY KEY,
-  account_id TEXT,
-  temp_home_dir TEXT NOT NULL,
+  account_id TEXT NOT NULL,
+  home_dir TEXT NOT NULL,
   provider_user_id TEXT,
   status TEXT NOT NULL,
   verification_uri TEXT,
@@ -347,6 +347,8 @@ provider_user_id 入池
 单账号文件锁
 text2video / image2video / frames2video 透传
 status 回原账号查询
+账号 refresh / active / disabled 管理
+fake Dreamina 行为测试覆盖登录、重复账号、生成和查询
 ```
 
 暂未实现：

@@ -84,11 +84,36 @@ program
     }
   });
 
-program
+const accountsCommand = program
   .command("accounts")
   .description("List Dreamina accounts known by the local account pool.")
   .action(async () => {
     const result = await requestJson("/v1/dreamina/accounts");
+    printJson(result);
+  });
+
+accountsCommand
+  .command("refresh")
+  .description("Refresh one Dreamina account credit snapshot.")
+  .argument("<account_id>")
+  .action(async (accountId: string) => {
+    const result = await requestJson(`/v1/dreamina/accounts/${encodeURIComponent(accountId)}/refresh`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    printJson(result);
+  });
+
+accountsCommand
+  .command("set-status")
+  .description("Enable or disable one Dreamina account.")
+  .argument("<account_id>")
+  .argument("<status>", "active or disabled")
+  .action(async (accountId: string, status: string) => {
+    const result = await requestJson(`/v1/dreamina/accounts/${encodeURIComponent(accountId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
     printJson(result);
   });
 

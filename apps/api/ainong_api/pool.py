@@ -20,7 +20,7 @@ def iso_now() -> str:
 @dataclass(frozen=True)
 class Account:
     id: str
-    provider_user_id: str
+    provider_user_id: str | None
     home_dir: Path
     status: str
     last_used_at: str | None
@@ -41,7 +41,7 @@ class DreaminaPool:
                 """
                 CREATE TABLE IF NOT EXISTS accounts (
                   id TEXT PRIMARY KEY,
-                  provider_user_id TEXT UNIQUE NOT NULL,
+                  provider_user_id TEXT UNIQUE,
                   display_name TEXT,
                   home_dir TEXT NOT NULL,
                   status TEXT NOT NULL,
@@ -70,8 +70,8 @@ class DreaminaPool:
 
                 CREATE TABLE IF NOT EXISTS login_sessions (
                   id TEXT PRIMARY KEY,
-                  account_id TEXT,
-                  temp_home_dir TEXT NOT NULL,
+                  account_id TEXT NOT NULL,
+                  home_dir TEXT NOT NULL,
                   provider_user_id TEXT,
                   status TEXT NOT NULL,
                   verification_uri TEXT,
@@ -87,14 +87,34 @@ class DreaminaPool:
                 """
             )
             self._ensure_column(db, "login_sessions", "account_id", "TEXT")
+            self._ensure_column(db, "login_sessions", "home_dir", "TEXT")
             self._ensure_column(db, "login_sessions", "stdout", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(db, "login_sessions", "stderr", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(db, "login_sessions", "last_error", "TEXT")
+            login_columns = self._columns(db, "login_sessions")
+            if "temp_home_dir" in login_columns:
+                db.execute(
+                    """
+                    UPDATE login_sessions
+                    SET home_dir = COALESCE(home_dir, temp_home_dir)
+                    WHERE home_dir IS NULL AND temp_home_dir IS NOT NULL
+                    """
+                )
+            db.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_dreamina_accounts_provider_user_id
+                ON accounts(provider_user_id)
+                WHERE provider_user_id IS NOT NULL AND provider_user_id <> ''
+                """
+            )
 
     def _ensure_column(self, db: sqlite3.Connection, table: str, column: str, definition: str) -> None:
-        columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+        columns = self._columns(db, table)
         if column not in columns:
             db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _columns(self, db: sqlite3.Connection, table: str) -> set[str]:
+        return {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -120,13 +140,23 @@ class DreaminaPool:
                 ORDER BY COALESCE(last_used_at, ''), id
                 """
             ).fetchall()
-        return [dict(row) for row in rows]
+        accounts = []
+        for row in rows:
+            item = dict(row)
+            credit_json = item.pop("credit_snapshot_json", None)
+            try:
+                item["credit"] = json.loads(str(credit_json)) if credit_json else None
+            except json.JSONDecodeError:
+                item["credit"] = None
+            accounts.append(item)
+        return accounts
 
     def create_login_session(
         self,
         *,
         session_id: str,
-        temp_home_dir: Path,
+        account_id: str,
+        home_dir: Path,
         verification_uri: str,
         user_code: str,
         device_code: str,
@@ -140,13 +170,14 @@ class DreaminaPool:
             db.execute(
                 """
                 INSERT INTO login_sessions (
-                  id, temp_home_dir, status, verification_uri, user_code,
+                  id, account_id, home_dir, status, verification_uri, user_code,
                   device_code, expires_at, stdout, stderr, created_at, updated_at
-                ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session_id,
-                    str(temp_home_dir),
+                    account_id,
+                    str(home_dir),
                     verification_uri,
                     user_code,
                     device_code,
@@ -165,7 +196,7 @@ class DreaminaPool:
         with self.connect() as db:
             row = db.execute(
                 """
-                SELECT id, account_id, temp_home_dir, provider_user_id, status,
+                SELECT id, account_id, home_dir, provider_user_id, status,
                        verification_uri, user_code, expires_at, last_error,
                        created_at, updated_at
                 FROM login_sessions
@@ -180,6 +211,21 @@ class DreaminaPool:
         with self.connect() as db:
             row = db.execute("SELECT * FROM login_sessions WHERE id = ?", (session_id,)).fetchone()
         return dict(row) if row else None
+
+    def used_login_account_ids(self) -> set[str]:
+        self.ensure()
+        with self.connect() as db:
+            rows = db.execute(
+                """
+                SELECT id FROM accounts
+                UNION
+                SELECT account_id AS id
+                FROM login_sessions
+                WHERE status IN ('pending', 'succeeded')
+                ORDER BY id
+                """
+            ).fetchall()
+        return {str(row["id"]) for row in rows if row["id"]}
 
     def mark_login_session(
         self,
@@ -329,16 +375,35 @@ class DreaminaPool:
             row = db.execute("SELECT * FROM accounts WHERE provider_user_id = ?", (provider_user_id,)).fetchone()
         return dict(row) if row else None
 
+    def account_row(self, account_id: str) -> dict[str, object] | None:
+        self.ensure()
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        return dict(row) if row else None
+
+    def accounts_without_provider_user_id(self) -> list[dict[str, object]]:
+        self.ensure()
+        with self.connect() as db:
+            rows = db.execute(
+                """
+                SELECT *
+                FROM accounts
+                WHERE provider_user_id IS NULL OR provider_user_id = ''
+                ORDER BY id
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def register_account(
         self,
-        provider_user_id: str,
+        account_id: str,
         home_dir: Path,
+        provider_user_id: str | None = None,
         display_name: str | None = None,
         credit_snapshot: dict[str, object] | None = None,
     ) -> Account:
         self.ensure()
         now = iso_now()
-        account_id = provider_user_id
         with self.connect() as db:
             db.execute(
                 """
@@ -346,12 +411,14 @@ class DreaminaPool:
                   id, provider_user_id, display_name, home_dir, status,
                   last_alive_at, credit_snapshot_json, created_at, updated_at
                 ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
-                ON CONFLICT(provider_user_id) DO UPDATE SET
+                ON CONFLICT(id) DO UPDATE SET
                   display_name = excluded.display_name,
                   home_dir = excluded.home_dir,
                   status = 'active',
                   last_alive_at = excluded.last_alive_at,
+                  provider_user_id = COALESCE(excluded.provider_user_id, accounts.provider_user_id),
                   credit_snapshot_json = excluded.credit_snapshot_json,
+                  last_error = NULL,
                   updated_at = excluded.updated_at
                 """,
                 (
@@ -366,6 +433,49 @@ class DreaminaPool:
                 ),
             )
         return Account(account_id, provider_user_id, home_dir, "active", None)
+
+    def update_account_credit(
+        self,
+        account_id: str,
+        *,
+        provider_user_id: str | None,
+        credit_snapshot: dict[str, object] | None,
+        last_error: str | None,
+        disable: bool = False,
+    ) -> None:
+        now = iso_now()
+        with self.connect() as db:
+            db.execute(
+                """
+                UPDATE accounts
+                SET last_alive_at = CASE WHEN ? THEN ? ELSE last_alive_at END,
+                    status = CASE WHEN ? THEN 'disabled' ELSE status END,
+                    provider_user_id = COALESCE(?, provider_user_id),
+                    credit_snapshot_json = COALESCE(?, credit_snapshot_json),
+                    last_error = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    last_error is None,
+                    now,
+                    disable,
+                    provider_user_id,
+                    json.dumps(credit_snapshot, ensure_ascii=False) if credit_snapshot else None,
+                    last_error,
+                    now,
+                    account_id,
+                ),
+            )
+
+    def update_account_status(self, account_id: str, status: str) -> dict[str, object] | None:
+        now = iso_now()
+        with self.connect() as db:
+            db.execute(
+                "UPDATE accounts SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, account_id),
+            )
+        return self.account_row(account_id)
 
     def account_lock_path(self, account: Account) -> Path:
         return account.home_dir / ".ainong.lock"

@@ -16,6 +16,10 @@ class TaskRequest(BaseModel):
     args: list[str] = Field(default_factory=list)
 
 
+class AccountStatusRequest(BaseModel):
+    status: str = Field(pattern="^(active|disabled)$")
+
+
 @app.on_event("startup")
 def startup() -> None:
     pool.ensure()
@@ -47,6 +51,25 @@ async def check_login(session_id: str) -> dict[str, object]:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/v1/dreamina/accounts/{account_id}/refresh")
+async def refresh_account(account_id: str) -> dict[str, object]:
+    credit = await dreamina.refresh_credit(account_id)
+    if credit is None:
+        raise HTTPException(status_code=404, detail="账号不存在或额度读取失败")
+    return {"success": True, "credit": credit}
+
+
+@app.patch("/v1/dreamina/accounts/{account_id}")
+def update_account(account_id: str, request: AccountStatusRequest) -> dict[str, object]:
+    try:
+        account = dreamina.update_account_status(account_id, request.status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+    return {"account": account}
 
 
 @app.post("/v1/dreamina/tasks")
