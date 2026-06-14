@@ -23,3 +23,12 @@ SQLite 账号池: ~/.ainong/dreamina/pool.db
 ```
 
 本地启动见：[开发说明](docs/development.md)。
+
+CLI 发布目标：
+
+```bash
+npm install -g ainong
+ainong doctor
+```
+
+当前 npm 包只负责安装 `ainong` 命令；账号池 API 仍需按开发说明启动本地 Python 服务。后续需要补 `ainong serve`，让外部用户安装后可直接启动本地服务。

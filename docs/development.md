@@ -98,3 +98,22 @@ Web
 MCP
 多机器调度
 ```
+
+## 发布 npm
+
+包名 `ainong` 用于发布 CLI：
+
+```bash
+npm login
+pnpm pack:cli
+pnpm publish:cli
+```
+
+注意：当前 npm 包只包含 Node.js CLI。账号池 API 仍需要本地启动：
+
+```bash
+. .venv/bin/activate
+uvicorn ainong_api.main:app --app-dir apps/api --port 8765
+```
+
+要让外部用户做到真正的一条命令可用，下一步需要补 `ainong serve`，由 CLI 自动启动或安装本地 Python API。

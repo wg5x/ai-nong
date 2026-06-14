@@ -3,13 +3,31 @@
   "version": "0.1.0",
   "description": "Ainong CLI: Dreamina-compatible account-pool wrapper.",
   "type": "module",
+  "homepage": "https://github.com/wg5x/ai-nong#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/wg5x/ai-nong.git",
+    "directory": "apps/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/wg5x/ai-nong/issues"
+  },
+  "keywords": [
+    "ainong",
+    "dreamina",
+    "jimeng",
+    "cli",
+    "ai-video",
+    "account-pool"
+  ],
   "bin": {
     "ainong": "dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "pnpm run check && pnpm run build"
   },
   "dependencies": {
     "commander": "^14.0.1"
@@ -22,8 +40,11 @@
   "engines": {
     "node": ">=20"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ]
 }
-

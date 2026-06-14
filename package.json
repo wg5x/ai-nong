@@ -6,7 +6,9 @@
   "scripts": {
     "build": "pnpm --filter ainong build",
     "check": "pnpm --filter ainong check",
-    "cli": "pnpm --filter ainong dev"
+    "cli": "pnpm --filter ainong dev",
+    "pack:cli": "pnpm --filter ainong build && cd apps/cli && npm pack --dry-run",
+    "publish:cli": "pnpm --filter ainong build && cd apps/cli && npm publish --access public"
   },
   "packageManager": "pnpm@10.17.1"
 }
